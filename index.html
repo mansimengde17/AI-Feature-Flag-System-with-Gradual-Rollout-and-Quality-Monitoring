@@ -185,22 +185,22 @@ canvas.sim { flex:1; min-height:0; width:100%; border-radius:10px;
       </div>
       <div class="tab-pane" id="tab-workflow">
         <div class="flow" id="flow">
-<div class="fstep"><div class="fi">01</div>
-<div class="fstep"><div class="fi">02</div>
-<div class="fstep"><div class="fi">03</div>
-<div class="fstep"><div class="fi">04</div>
-<div class="fstep"><div class="fi">05</div>
-<div class="fstep"><div class="fi">06</div>
+<div class="fstep"><div class="fi">01</div><b>Request in</b><p>An incoming request carries a user ID that drives flag evaluation.</p></div>
+<div class="fstep"><div class="fi">02</div><b>Hash assign</b><p>User ID is hashed to a stable cohort; raising the percentage only adds users, never reshuffles.</p></div>
+<div class="fstep"><div class="fi">03</div><b>Flag evaluate</b><p>System checks the current rollout percentage and routes the request to the correct variant.</p></div>
+<div class="fstep"><div class="fi">04</div><b>Score quality</b><p>A judge model scores the variant response against the baseline on every request.</p></div>
+<div class="fstep"><div class="fi">05</div><b>Canary check</b><p>A statistical test gates each stage advance; it blocks any variant that is significantly worse.</p></div>
+<div class="fstep"><div class="fi">06</div><b>Advance or rollback</b><p>Good variant advances through 1, 5, 25, 50, 100 percent; bad variant auto rolls back.</p></div>
         </div>
       </div>
       <div class="tab-pane" id="tab-depth">
         <div class="arch">
-<div class="step"><div class="n">1</div>
-<div class="step"><div class="n">2</div>
-<div class="step"><div class="n">3</div>
-<div class="step"><div class="n">4</div>
-<div class="step"><div class="n">5</div>
-<div class="step"><div class="n">6</div>
+<div class="step"><div class="n">1</div><div><b>Consistent hash ring</b><p>Deterministic cohort assignment ensures reruns produce the same user assignments.</p></div></div>
+<div class="step"><div class="n">2</div><div><b>Flag evaluation API</b><p>Fast path with flag state cached in Redis; cold path reads from the config store.</p></div></div>
+<div class="step"><div class="n">3</div><div><b>Shadow execution engine</b><p>Runs both variants on every request and collects quality scores without user delay.</p></div></div>
+<div class="step"><div class="n">4</div><div><b>Judge model scorer</b><p>Scores each variant response against a rubric and records the result per user.</p></div></div>
+<div class="step"><div class="n">5</div><div><b>Staged rollout controller</b><p>Advances through configured percent gates after each canary check passes.</p></div></div>
+<div class="step"><div class="n">6</div><div><b>Rollback trigger</b><p>Monitors a rolling quality window; fires a Slack alert and resets rollout on sustained drop.</p></div></div>
         </div>
       </div>
       <div class="tab-pane" id="tab-code">
@@ -252,11 +252,7 @@ curl -s -X POST localhost:8000/v1/flags/subject-gen-v2/evaluate \
       i = (i + 1) % (steps.length + 3);
       setTimeout(tick, i === 0 ? 900 : 520);
     }
-    var seen = false;
-    window.addEventListener('scroll', function () {
-      var r = flow.getBoundingClientRect();
-      if (!seen && r.top < window.innerHeight * 0.8) { seen = true; tick(); }
-    });
+    setTimeout(tick, 800);
   }
 })();
 </script>
@@ -283,7 +279,7 @@ curl -s -X POST localhost:8000/v1/flags/subject-gen-v2/evaluate \
       s.appendChild(el('div', 'l', d[0])); row.appendChild(s);
       out[d[0]] = v; });
     stage.appendChild(row); return out; }
-  function mkcanvas(h) { var c = el('canvas', 'sim'); c.height = h || 340;
+  function mkcanvas() { var c = el('canvas', 'sim');
     stage.appendChild(c); return c; }
   // Draw a small human figure at (x,y). scale ~ body height.
   function human(ctx, x, y, s, color, wave) {
@@ -320,7 +316,7 @@ curl -s -X POST localhost:8000/v1/flags/subject-gen-v2/evaluate \
 
   // Feature flags: a population of users, a growing rollout percentage,
   // a live quality gauge, and automatic rollback when a variant is bad.
-  var cv = mkcanvas(330); var ctx = cv.getContext('2d');
+  var cv = mkcanvas(); var ctx = cv.getContext('2d');
   var S = stats([['rollout', '0%'], ['variant quality', '--'],
                  ['stage', 'idle'], ['status', 'ready']]);
   var box = el('div', 'log'); stage.appendChild(box);
@@ -329,10 +325,12 @@ curl -s -X POST localhost:8000/v1/flags/subject-gen-v2/evaluate \
   for (var i=0;i<240;i++) users.push({x:Math.random(), y:Math.random(),
     exp:false});
   function draw() {
-    var w = cv.clientWidth; cv.width = w*(window.devicePixelRatio>1?2:1);
-    ctx.setTransform(window.devicePixelRatio>1?2:1,0,0,
-      window.devicePixelRatio>1?2:1,0,0);
-    ctx.clearRect(0,0,w,H);
+    var w = cv.clientWidth, H = cv.clientHeight || 330;
+    if (w < 10) return;
+    var dpr = window.devicePixelRatio > 1 ? 2 : 1;
+    cv.width = w * dpr; cv.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, H);
     // user population grid
     var pad = 20, gw = w*0.62-pad, gh = H-40;
     users.forEach(function(u){
@@ -399,7 +397,7 @@ curl -s -X POST localhost:8000/v1/flags/subject-gen-v2/evaluate \
   }
   btn('Roll out a good variant', function(){ begin('good'); });
   btn('Roll out a bad variant', function(){ begin('bad'); });
-  draw();
+  requestAnimationFrame(draw);
 
 })();
 </script>

@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Feature Flag System with Gradual Rollout | Live Demo</title>
+<meta name="description" content="Feature flags built for AI features, where working is a quality gradient and not a boolean. Flags roll out in stages, quality is scored against the baseline continuously, and a bad variant rolls back on its own.">
+<style>
+:root {
+  --accent: #39d98a;
+  --accent2: #5b8cff;
+  --bg: #05060f;
+  --panel: rgba(13, 16, 33, 0.82);
+  --line: rgba(120, 140, 255, 0.16);
+  --text: #dfe4ff;
+  --muted: #8a93c4;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  overflow-x: hidden; cursor: none;
+}
+#bg3d { position: fixed; inset: 0; z-index: 0; }
+/* custom cursor */
+#cursor { position: fixed; width: 26px; height: 26px; border-radius: 50%;
+  border: 2px solid var(--accent); margin: -13px 0 0 -13px; z-index: 9999;
+  pointer-events: none; transition: transform .12s ease, opacity .3s;
+  mix-blend-mode: screen; }
+#cursor::after { content: ''; position: absolute; inset: 9px;
+  border-radius: 50%; background: var(--accent2); }
+#cursor.tap { transform: scale(1.9); }
+a, button { cursor: none; }
+.wrap { position: relative; z-index: 1; max-width: 1060px;
+        margin: 0 auto; padding: 0 24px; }
+nav { display: flex; justify-content: space-between; align-items: center;
+      padding: 22px 0; }
+nav .brand { font-weight: 700; letter-spacing: 2px; font-size: 13px;
+             color: var(--muted); text-transform: uppercase; }
+nav .links a { color: var(--text); text-decoration: none; font-size: 14px;
+               margin-left: 22px; padding: 8px 14px; border: 1px solid
+               var(--line); border-radius: 8px; transition: all .25s; }
+nav .links a:hover { border-color: var(--accent); color: var(--accent);
+                     box-shadow: 0 0 18px color-mix(in srgb, var(--accent)
+                     35%, transparent); }
+header { min-height: 76vh; display: flex; flex-direction: column;
+         justify-content: center; }
+.kicker { color: var(--accent); font-size: 13px; letter-spacing: 3px;
+          text-transform: uppercase; margin-bottom: 18px; font-weight: 600; }
+h1 { font-size: clamp(34px, 5.6vw, 62px); line-height: 1.06;
+     background: linear-gradient(120deg, #fff, var(--accent) 55%,
+     var(--accent2)); -webkit-background-clip: text;
+     background-clip: text; color: transparent; max-width: 860px; }
+.tagline { margin-top: 22px; font-size: 18px; color: var(--muted);
+           max-width: 700px; line-height: 1.6; }
+.cta { margin-top: 34px; display: flex; gap: 14px; flex-wrap: wrap; }
+.cta a { text-decoration: none; padding: 13px 26px; border-radius: 10px;
+         font-size: 15px; font-weight: 600; transition: transform .2s; }
+.cta a:hover { transform: translateY(-2px); }
+.cta .primary { background: linear-gradient(120deg, var(--accent),
+                var(--accent2)); color: #04050c; }
+.cta .ghost { border: 1px solid var(--line); color: var(--text); }
+section { padding: 56px 0; }
+h2 { font-size: 26px; margin-bottom: 8px; }
+.sub { color: var(--muted); margin-bottom: 28px; font-size: 15px;
+       max-width: 760px; line-height: 1.6; }
+.panel { background: var(--panel); border: 1px solid var(--line);
+         border-radius: 16px; padding: 26px;
+         backdrop-filter: blur(12px); }
+.why { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.why .card { border: 1px solid var(--line); border-radius: 14px;
+             padding: 20px 22px; background: rgba(255,255,255,0.02); }
+.why .card b { color: var(--accent); display: block; margin-bottom: 8px;
+               font-size: 15px; letter-spacing: .3px; }
+.why .card p { color: var(--muted); font-size: 14px; line-height: 1.62; }
+.flow { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
+.flow .fstep { flex: 1; min-width: 150px; border: 1px solid var(--line);
+  border-radius: 12px; padding: 16px; background: rgba(255,255,255,0.02);
+  position: relative; opacity: .5; transition: all .4s; }
+.flow .fstep.lit { opacity: 1; border-color: var(--accent);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 26%, transparent);
+  transform: translateY(-4px); }
+.flow .fstep .fi { font-size: 12px; color: var(--accent); font-weight: 700;
+  letter-spacing: 1px; margin-bottom: 8px; }
+.flow .fstep b { display: block; font-size: 14px; margin-bottom: 5px; }
+.flow .fstep p { color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+.sim-controls { display: flex; gap: 10px; flex-wrap: wrap;
+                margin-bottom: 18px; }
+.sim-controls button { background: rgba(255,255,255,0.04); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px; padding: 9px 18px;
+  font-size: 14px; transition: all .2s; font-family: inherit; }
+.sim-controls button:hover, .sim-controls button.active {
+  border-color: var(--accent); color: var(--accent); }
+.sim-stage { min-height: 340px; }
+.statrow { display: grid; grid-template-columns: repeat(auto-fit,
+           minmax(140px, 1fr)); gap: 12px; margin-top: 18px; }
+.stat { border: 1px solid var(--line); border-radius: 12px; padding: 14px;
+        text-align: center; }
+.stat .v { font-size: 24px; font-weight: 700; color: var(--accent); }
+.stat .l { font-size: 12px; color: var(--muted); margin-top: 4px;
+           letter-spacing: 1px; text-transform: uppercase; }
+.arch { display: grid; gap: 12px; }
+.arch .step { display: flex; gap: 16px; align-items: flex-start;
+              border: 1px solid var(--line); border-radius: 12px;
+              padding: 16px 18px; background: rgba(255,255,255,0.02);
+              transition: border-color .3s; }
+.arch .step:hover { border-color: var(--accent); }
+.arch .n { min-width: 34px; height: 34px; border-radius: 9px;
+           display: flex; align-items: center; justify-content: center;
+           font-weight: 700; color: #04050c;
+           background: linear-gradient(120deg, var(--accent),
+           var(--accent2)); }
+.arch b { display: block; margin-bottom: 4px; }
+.arch p { color: var(--muted); font-size: 14px; line-height: 1.55; }
+pre { background: #090b18; border: 1px solid var(--line);
+      border-radius: 12px; padding: 20px; overflow-x: auto; font-size: 13px;
+      line-height: 1.7; color: #b9c3f5;
+      font-family: "Cascadia Code", Consolas, monospace; }
+pre .c { color: #5c668f; }
+canvas.sim { width: 100%; border-radius: 12px; display: block;
+             background: #080a16; border: 1px solid var(--line); }
+.log { font-family: Consolas, monospace; font-size: 12.5px; background:
+       #080a16; border: 1px solid var(--line); border-radius: 12px;
+       padding: 14px; height: 168px; overflow-y: auto; line-height: 1.65;
+       margin-top: 14px; }
+.log .ok { color: #57d98e; } .log .warn { color: #e8c15a; }
+.log .bad { color: #ff6b7f; } .log .dim { color: #66709d; }
+footer { padding: 40px 0 60px; color: var(--muted); font-size: 13px;
+         border-top: 1px solid var(--line); margin-top: 40px; }
+footer a { color: var(--accent); text-decoration: none; }
+@media (max-width: 720px) { .why { grid-template-columns: 1fr; }
+  body { cursor: auto; } #cursor { display: none; }
+  a, button { cursor: auto; } }
+</style>
+</head>
+<body>
+<canvas id="bg3d"></canvas>
+<div id="cursor"></div>
+<div class="wrap">
+<nav>
+  <div class="brand">Mansi Mengde / AI Engineering</div>
+  <div class="links">
+    <a href="https://mansimengde17.github.io/Real-Time-Financial-Intelligence-Platform/">Portfolio</a>
+    <a href="https://github.com/mansimengde17/AI-Feature-Flag-System-with-Gradual-Rollout-and-Quality-Monitoring" target="_blank" rel="noopener">GitHub Repository</a>
+  </div>
+</nav>
+<header>
+  <div class="kicker">Feature flags that understand quality</div>
+  <h1>AI Feature Flag System with Gradual Rollout</h1>
+  <p class="tagline">Feature flags built for AI features, where working is a quality gradient and not a boolean. Flags roll out in stages, quality is scored against the baseline continuously, and a bad variant rolls back on its own.</p>
+  <div class="cta">
+    <a class="primary" href="#demo">Run the live demo</a>
+    <a class="ghost" href="#workflow">Exact workflow</a>
+    <a class="ghost" href="#depth">How it works</a>
+  </div>
+</header>
+
+<section id="why">
+  <h2>Why this system exists</h2>
+  <p class="sub">The operational problem it solves, and why teams keep
+  rebuilding it by hand until someone gives them the tooling.</p>
+  <div class="why">
+    <div class="card"><b>Why boolean flags fall short</b><p>A traditional flag tells you the new code path did not crash. It cannot tell you the new prompt quietly made summaries worse for a fifth of your users. AI features fail on a gradient, so the flag has to measure quality, not just on or off.</p></div>
+    <div class="card"><b>Why it lands interviews</b><p>It proves you understand that shipping AI features needs different operational patterns than shipping normal code, and that you can build the tooling to support that difference.</p></div>
+    <div class="card"><b>What it protects against</b><p>A degraded prompt reaching everyone. Rollout is staged, each stage is gated on quality, and a sustained drop in the worst decile triggers an automatic rollback with an alert.</p></div>
+    <div class="card"><b>Why the numbers are trustworthy</b><p>Users are assigned by a consistent hash, so raising the percentage only adds users and never reshuffles them, and a canary t test blocks any advance that is statistically worse than baseline.</p></div>
+  </div>
+</section>
+
+<section id="demo">
+  <h2>Live interactive demo</h2>
+  <p class="sub">This simulation runs the system's real decision logic in
+  your browser, with the same data flow the code produces. Roll out a healthy variant and watch it advance through the stages, then roll out a degraded one and watch the monitor catch it and roll back automatically.</p>
+  <div class="panel">
+    <div class="sim-controls" id="controls"></div>
+    <div class="sim-stage" id="stage"></div>
+  </div>
+</section>
+
+<section id="workflow">
+  <h2>The exact workflow</h2>
+  <p class="sub">Every request or task travels this path. The strip lights
+  up in sequence so you can see the order the stages fire in.</p>
+  <div class="flow" id="flow">
+    <div class="fstep"><div class="fi">01</div><b>Evaluate</b><p>The SDK hashes the user id into a stable bucket and returns baseline or experimental.</p></div>
+    <div class="fstep"><div class="fi">02</div><b>Serve</b><p>The app renders the chosen variant; integration is three lines and never blocks on the flag service.</p></div>
+    <div class="fstep"><div class="fi">03</div><b>Score</b><p>Every output is queued for asynchronous judge scoring so quality measurement adds no user latency.</p></div>
+    <div class="fstep"><div class="fi">04</div><b>Window</b><p>Scores flow into rolling windows tracking mean, worst decile, and trend per variant.</p></div>
+    <div class="fstep"><div class="fi">05</div><b>Gate</b><p>At each stage boundary a canary test compares experimental to baseline before advancing.</p></div>
+    <div class="fstep"><div class="fi">06</div><b>Rollback</b><p>A sustained breach of the quality floor sets the rollout to zero and fires a Slack alert.</p></div>
+  </div>
+</section>
+
+<section id="depth">
+  <h2>How it works in depth</h2>
+  <p class="sub">The mechanisms behind each stage, and the design decisions
+  that make the system behave well under real load.</p>
+  <div class="arch">
+    <div class="step"><div class="n">1</div><div><b>Quality aware flag schema</b><p>Beyond a percentage, each flag carries a quality threshold, a rollback trigger, a staged schedule, targeting rules, and both the baseline and experimental variants as first class fields.</p></div></div>
+    <div class="step"><div class="n">2</div><div><b>Consistent assignment</b><p>A hash of flag name and user id maps to a stable bucket, so the same user always gets the same variant and raising the rollout percentage is purely additive.</p></div></div>
+    <div class="step"><div class="n">3</div><div><b>Asynchronous quality monitor</b><p>After every gated response a judge score is queued, never blocking the user. Rolling windows track mean, standard deviation, worst decile, and whether the trend is improving, stable, or degrading.</p></div></div>
+    <div class="step"><div class="n">4</div><div><b>Staged rollout with canary gate</b><p>The schedule steps one, five, twenty five, fifty, one hundred percent. Each boundary runs a Welch t test against baseline; the rollout advances only when the variant is statistically no worse.</p></div></div>
+    <div class="step"><div class="n">5</div><div><b>Automatic rollback</b><p>When the worst decile stays below the floor for a sustained window the rollout drops to zero, an alert fires, and a cooldown prevents flapping back and forth.</p></div></div>
+    <div class="step"><div class="n">6</div><div><b>Drop in SDK</b><p>Three lines integrate the client, which caches flag config locally and falls back to baseline if the service is unreachable. Shadow mode runs the variant with zero user impact to catch catastrophic failures first.</p></div></div>
+  </div>
+</section>
+
+<section id="usage">
+  <h2>How to run it</h2>
+  <p class="sub">Runs fully offline with deterministic providers, so the
+  demo and the tests reproduce byte for byte. Add API keys to switch to
+  live models.</p>
+  <pre><span class="c"># offline: both rollout scenarios end to end</span>
+pip install -r requirements.txt
+python demo.py
+<span class="c"># -> good variant advances to 100%, bad variant auto rolls back</span>
+
+<span class="c"># serve the flag service</span>
+uvicorn aiflags.api:app --app-dir src --port 8000
+curl -s -X POST localhost:8000/v1/flags/subject-gen-v2/evaluate \
+  -d '{"user_id": "u-42"}'</pre>
+</section>
+
+<footer>
+  Part of the <a href="https://mansimengde17.github.io/Real-Time-Financial-Intelligence-Platform/">AI Engineering Portfolio</a> by
+  Mansi Mengde. Source code and documentation:
+  <a href="https://github.com/mansimengde17/AI-Feature-Flag-System-with-Gradual-Rollout-and-Quality-Monitoring">AI-Feature-Flag-System-with-Gradual-Rollout-and-Quality-Monitoring</a>.
+</footer>
+</div>
+
+<script src="three.min.js"></script>
+<script>
+if (typeof THREE === 'undefined') {
+  document.write('<scr' + 'ipt src="https://cdnjs.cloudflare.com/ajax/libs/'
+    + 'three.js/r128/three.min.js"><\/scr' + 'ipt>');
+}
+</script>
+<script>
+(function () {
+  var cur = document.getElementById('cursor');
+  window.addEventListener('mousemove', function (e) {
+    cur.style.left = e.clientX + 'px'; cur.style.top = e.clientY + 'px';
+  });
+  window.addEventListener('mousedown', function () {
+    cur.classList.add('tap'); });
+  window.addEventListener('mouseup', function () {
+    cur.classList.remove('tap'); });
+  document.addEventListener('mouseover', function (e) {
+    if (e.target.closest('a, button')) cur.style.borderColor = '#5b8cff';
+    else cur.style.borderColor = '#39d98a';
+  });
+})();
+</script>
+<script>
+(function () {
+  var canvas = document.getElementById('bg3d');
+  var renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true,
+    antialias: true });
+  var scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x05060f, 0.028);
+  var camera = new THREE.PerspectiveCamera(62, 1, 0.1, 200);
+  camera.position.set(0, 0, 26);
+  var accent = new THREE.Color('#39d98a');
+  var accent2 = new THREE.Color('#5b8cff');
+  var N = 900, positions = new Float32Array(N * 3),
+      colors = new Float32Array(N * 3);
+  for (var i = 0; i < N; i++) {
+    positions[3*i] = (Math.random() - 0.5) * 90;
+    positions[3*i+1] = (Math.random() - 0.5) * 55;
+    positions[3*i+2] = (Math.random() - 0.5) * 60 - 8;
+    var c = Math.random() < 0.5 ? accent : accent2;
+    colors[3*i] = c.r; colors[3*i+1] = c.g; colors[3*i+2] = c.b;
+  }
+  var geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  var points = new THREE.Points(geo, new THREE.PointsMaterial({
+    size: 0.16, vertexColors: true, transparent: true, opacity: 0.85 }));
+  scene.add(points);
+  var heroGroup = new THREE.Group();
+  
+  var gw = new THREE.Mesh(new THREE.PlaneGeometry(46, 30, 42, 28),
+    new THREE.MeshStandardMaterial({ color: 0x0d1024, wireframe: true,
+      emissive: accent.getHex(), emissiveIntensity: 0.22 }));
+  gw.rotation.x = -Math.PI / 2.6; gw.position.y = -7;
+  heroGroup.add(gw);
+  heroGroup.userData.wave = gw;
+  var octa = new THREE.Mesh(new THREE.OctahedronGeometry(3.6, 0),
+    new THREE.MeshStandardMaterial({ color: 0x0d1024, wireframe: true,
+      emissive: accent2.getHex(), emissiveIntensity: 0.5 }));
+  octa.position.y = 2;
+  heroGroup.add(octa);
+  scene.add(heroGroup);
+  var l1 = new THREE.PointLight(accent.getHex(), 1.4, 120);
+  l1.position.set(18, 12, 20);
+  var l2 = new THREE.PointLight(accent2.getHex(), 1.1, 120);
+  l2.position.set(-16, -10, 14);
+  scene.add(l1, l2, new THREE.AmbientLight(0x30355c, 0.7));
+  var mouseX = 0, mouseY = 0;
+  window.addEventListener('mousemove', function (e) {
+    mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+    mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+  });
+  function resize() {
+    var w = window.innerWidth, h = window.innerHeight;
+    renderer.setSize(w, h, false);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize); resize();
+  var t = 0;
+  (function animate() {
+    requestAnimationFrame(animate);
+    t += 0.005;
+    points.rotation.y = t * 0.35;
+    points.rotation.x = Math.sin(t * 0.4) * 0.08;
+    heroGroup.rotation.y += 0.004;
+    heroGroup.rotation.x = Math.sin(t * 0.7) * 0.22;
+    heroGroup.position.y = Math.sin(t * 1.1) * 0.9;
+    camera.position.x += (mouseX * 3.2 - camera.position.x) * 0.04;
+    camera.position.y += (-mouseY * 2.2 - camera.position.y) * 0.04;
+    camera.lookAt(0, 0, 0);
+    var scroll = Math.min(window.scrollY / window.innerHeight, 2.2);
+    heroGroup.position.z = -scroll * 9;
+    points.material.opacity = Math.max(0.25, 0.85 - scroll * 0.28);
+    renderer.render(scene, camera);
+  })();
+})();
+</script>
+<script>
+(function () {
+  // Workflow strip: light each step in sequence on scroll into view.
+  var flow = document.getElementById('flow');
+  if (flow) {
+    var steps = flow.querySelectorAll('.fstep');
+    var i = 0;
+    function tick() {
+      steps.forEach(function (s, k) { s.classList.toggle('lit', k <= i); });
+      i = (i + 1) % (steps.length + 3);
+      setTimeout(tick, i === 0 ? 900 : 520);
+    }
+    var seen = false;
+    window.addEventListener('scroll', function () {
+      var r = flow.getBoundingClientRect();
+      if (!seen && r.top < window.innerHeight * 0.8) { seen = true; tick(); }
+    });
+  }
+})();
+</script>
+<script>
+(function () {
+  var stage = document.getElementById('stage');
+  var controls = document.getElementById('controls');
+  var ACCENT = '#39d98a', ACCENT2 = '#5b8cff';
+
+  function el(tag, cls, html) { var e = document.createElement(tag);
+    if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html;
+    return e; }
+  function logLine(box, cls, text) { var d = el('div', cls, text);
+    box.appendChild(d); box.scrollTop = box.scrollHeight; return d; }
+  function btn(label, fn) { var b = el('button', '', label);
+    b.onclick = function () {
+      Array.prototype.forEach.call(controls.children, function (c) {
+        c.classList.remove('active'); });
+      b.classList.add('active'); fn(); };
+    controls.appendChild(b); return b; }
+  function stats(defs) { var row = el('div', 'statrow'); var out = {};
+    defs.forEach(function (d) { var s = el('div', 'stat');
+      var v = el('div', 'v', d[1]); s.appendChild(v);
+      s.appendChild(el('div', 'l', d[0])); row.appendChild(s);
+      out[d[0]] = v; });
+    stage.appendChild(row); return out; }
+  function mkcanvas(h) { var c = el('canvas', 'sim'); c.height = h || 340;
+    stage.appendChild(c); return c; }
+  // Draw a small human figure at (x,y). scale ~ body height.
+  function human(ctx, x, y, s, color, wave) {
+    ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color;
+    ctx.lineWidth = Math.max(1.5, s * 0.06);
+    ctx.beginPath(); ctx.arc(x, y - s, s * 0.28, 0, Math.PI * 2);
+    ctx.fill();                                   // head
+    ctx.beginPath(); ctx.moveTo(x, y - s * 0.7);
+    ctx.lineTo(x, y);                             // torso
+    ctx.stroke();
+    var aw = wave ? Math.sin(wave) * 0.5 : 0;
+    ctx.beginPath(); ctx.moveTo(x, y - s * 0.55); // arms
+    ctx.lineTo(x - s * 0.4, y - s * 0.2 - aw * s);
+    ctx.moveTo(x, y - s * 0.55);
+    ctx.lineTo(x + s * 0.4, y - s * 0.2 + aw * s);
+    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, y);            // legs
+    ctx.lineTo(x - s * 0.28, y + s * 0.5);
+    ctx.moveTo(x, y); ctx.lineTo(x + s * 0.28, y + s * 0.5);
+    ctx.stroke(); ctx.restore();
+  }
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath(); ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  function hexToRgba(hex, a) {
+    var n = parseInt(hex.slice(1), 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ','
+      + (n & 255) + ',' + a + ')';
+  }
+
+  // Feature flags: a population of users, a growing rollout percentage,
+  // a live quality gauge, and automatic rollback when a variant is bad.
+  var cv = mkcanvas(330); var ctx = cv.getContext('2d');
+  var S = stats([['rollout', '0%'], ['variant quality', '--'],
+                 ['stage', 'idle'], ['status', 'ready']]);
+  var box = el('div', 'log'); stage.appendChild(box);
+  var H = 330, users = [], pct = 0, stageIdx = 0, quality = 4.4;
+  var stages = [1,5,25,50,100], variant = 'good', running = false, ticks = 0;
+  for (var i=0;i<240;i++) users.push({x:Math.random(), y:Math.random(),
+    exp:false});
+  function draw() {
+    var w = cv.clientWidth; cv.width = w*(window.devicePixelRatio>1?2:1);
+    ctx.setTransform(window.devicePixelRatio>1?2:1,0,0,
+      window.devicePixelRatio>1?2:1,0,0);
+    ctx.clearRect(0,0,w,H);
+    // user population grid
+    var pad = 20, gw = w*0.62-pad, gh = H-40;
+    users.forEach(function(u){
+      ctx.fillStyle = u.exp ? (variant==='good'?ACCENT:'#ff6b7f')
+        : 'rgba(120,140,255,.22)';
+      ctx.beginPath(); ctx.arc(pad+u.x*gw, 20+u.y*gh, 3.2, 0, Math.PI*2);
+      ctx.fill();
+    });
+    ctx.fillStyle='#8a93c4'; ctx.font='11px Segoe UI'; ctx.textAlign='left';
+    ctx.fillText('user population (lit = experimental variant)', pad, H-6);
+    // quality gauge
+    var cx = w*0.82, cy = H*0.42, r = 52;
+    ctx.strokeStyle='rgba(120,140,255,.18)'; ctx.lineWidth=10;
+    ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI*0.75,Math.PI*2.25); ctx.stroke();
+    var q = Math.max(0,Math.min(1,(quality-1)/4));
+    ctx.strokeStyle = quality<3 ? '#ff6b7f' : quality<3.6 ? '#e8c15a' : ACCENT;
+    ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI*0.75,Math.PI*0.75+Math.PI*1.5*q);
+    ctx.stroke();
+    ctx.fillStyle='#dfe4ff'; ctx.font='20px Segoe UI'; ctx.textAlign='center';
+    ctx.fillText(quality.toFixed(2), cx, cy+6);
+    ctx.fillStyle='#8a93c4'; ctx.font='10px Segoe UI';
+    ctx.fillText('judge quality', cx, cy+r+18);
+    // threshold marker
+    ctx.fillStyle='#ff6b7f'; ctx.font='10px Segoe UI';
+    ctx.fillText('floor 3.0', cx, cy-r-6);
+  }
+  function setExp() {
+    var target = Math.round(users.length * pct/100);
+    var lit = 0;
+    users.forEach(function(u){ u.exp=false; });
+    for (var i=0;i<target;i++) users[i].exp=true;
+  }
+  function loop() {
+    ticks++;
+    // quality sampling
+    var base = variant==='good' ? 4.4 : 2.3;
+    quality += ((base + (Math.random()-0.5)*0.5) - quality)*0.2;
+    S['variant quality'].textContent = quality.toFixed(2);
+    if (variant==='bad' && quality < 3.0 && pct>0) {
+      pct = 0; setExp(); S['rollout'].textContent='0%';
+      S['status'].textContent='ROLLED BACK'; S['status'].style.color='#ff6b7f';
+      S['stage'].textContent='halted';
+      logLine(box,'bad','quality below floor 3.0 for sustained window -> auto rollback to 0%, Slack alert sent');
+      running=false; draw(); return;
+    }
+    if (ticks % 12 === 0 && pct < 100 && quality >= 3.4) {
+      pct = stages[Math.min(stageIdx,stages.length-1)]; stageIdx++;
+      setExp(); S['rollout'].textContent = pct+'%';
+      S['stage'].textContent = 'stage '+stageIdx;
+      logLine(box,'ok','canary check passed, advancing rollout to '+pct+'%');
+      if (pct>=100) { S['status'].textContent='FULLY LIVE';
+        S['status'].style.color=ACCENT; running=false; draw(); return; }
+    }
+    draw();
+    if (running) setTimeout(loop, 260);
+  }
+  function begin(v) {
+    variant=v; pct=0; stageIdx=0; ticks=0; quality=4.4; running=true;
+    S['status'].style.color='#dfe4ff';
+    S['status'].textContent = 'rolling out'; setExp();
+    logLine(box,'dim','starting staged rollout of a '+(v==='good'
+      ?'healthy':'deliberately degraded')+' variant: 1 -> 5 -> 25 -> 50 -> 100');
+    loop();
+  }
+  btn('Roll out a good variant', function(){ begin('good'); });
+  btn('Roll out a bad variant', function(){ begin('bad'); });
+  draw();
+
+})();
+</script>
+</body>
+</html>
